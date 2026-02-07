@@ -1,0 +1,444 @@
+{
+  "info": {
+    "_postman_id": "a1b2c3d4-e5f6-7890-g1h2-i3j4k5l6m7n8",
+    "name": "网吧管理系统API",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "会员管理",
+      "item": [
+        {
+          "name": "添加会员",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"张三\",\n  \"phone\": \"13800138001\",\n  \"balance\": 100.00\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/members",
+              "host": ["{{base_url}}"],
+              "path": ["members"]
+            },
+            "description": "创建新会员，phone必须是11位数字，balance可选（默认为0）"
+          }
+        },
+        {
+          "name": "查询会员列表",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "description": "JWT认证令牌"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/members",
+              "host": ["{{base_url}}"],
+              "path": ["members"]
+            },
+            "description": "获取所有会员列表，需要认证"
+          }
+        },
+        {
+          "name": "查询会员详情",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "description": "JWT认证令牌"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/members/1",
+              "host": ["{{base_url}}"],
+              "path": ["members", "1"]
+            },
+            "description": "获取指定ID的会员详细信息，需要认证"
+          }
+        },
+        {
+          "name": "修改会员信息",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "description": "JWT认证令牌"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"李四\",\n  \"phone\": \"13900139001\",\n  \"balance\": 200.00\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/members/1",
+              "host": ["{{base_url}}"],
+              "path": ["members", "1"]
+            },
+            "description": "修改会员信息，可以只提供需要更新的字段。例如，只更新姓名：{\"name\": \"李四\"}"
+          }
+        },
+        {
+          "name": "删除会员",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "description": "JWT认证令牌"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/members/1",
+              "host": ["{{base_url}}"],
+              "path": ["members", "1"]
+            },
+            "description": "删除指定ID的会员，需要管理员权限。如果会员正在使用机位，则无法删除。"
+          }
+        },
+        {
+          "name": "会员充值",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "description": "JWT认证令牌"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 50.00\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/members/1/recharge",
+              "host": ["{{base_url}}"],
+              "path": ["members", "1", "recharge"]
+            },
+            "description": "为会员账户充值指定金额，amount必须是大于0的数字"
+          }
+        }
+      ]
+    },
+    {
+      "name": "用户管理",
+      "item": [
+        {
+          "name": "用户登录",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"admin\",\n  \"password\": \"123456\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/login",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "login"]
+            }
+          }
+        },
+        {
+          "name": "获取当前用户信息",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/auth/me",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "me"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "上机记录管理",
+      "item": [
+        {
+          "name": "获取所有上机记录",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/usage-records",
+              "host": ["{{base_url}}"],
+              "path": ["usage-records"],
+              "query": [
+                {
+                  "key": "member_id",
+                  "value": "1",
+                  "description": "会员ID"
+                },
+                {
+                  "key": "start_date",
+                  "value": "2025-09-01",
+                  "description": "开始日期"
+                },
+                {
+                  "key": "end_date",
+                  "value": "2025-09-14",
+                  "description": "结束日期"
+                },
+                {
+                  "key": "status",
+                  "value": "active",
+                  "description": "状态：active(进行中)或completed(已完成)"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "获取单个上机记录详情",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/usage-records/1",
+              "host": ["{{base_url}}"],
+              "path": ["usage-records", "1"]
+            }
+          }
+        },
+        {
+          "name": "开始上机",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"member_id\": 1,\n  \"machine_id\": 1\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/usage-records/start",
+              "host": ["{{base_url}}"],
+              "path": ["usage-records", "start"]
+            }
+          }
+        },
+        {
+          "name": "结束上机",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\\n  \\\"record_id\\\": 1\\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/usage-records/end",
+              "host": ["{{base_url}}"],
+              "path": ["usage-records", "end"]
+            }
+          }
+        },
+        {
+          "name": "获取特定会员的上机记录",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/usage-records/member/1",
+              "host": ["{{base_url}}"],
+              "path": ["usage-records", "member", "1"]
+            }
+          }
+        },
+        {
+          "name": "统计上机记录",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/usage-records/stats/summary",
+              "host": ["{{base_url}}"],
+              "path": ["usage-records", "stats", "summary"],
+              "query": [
+                {
+                  "key": "start_date",
+                  "value": "2025-09-01",
+                  "description": "开始日期"
+                },
+                {
+                  "key": "end_date",
+                  "value": "2025-09-14",
+                  "description": "结束日期"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "按机位统计使用情况",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/usage-records/stats/machines",
+              "host": ["{{base_url}}"],
+              "path": ["usage-records", "stats", "machines"],
+              "query": [
+                {
+                  "key": "start_date",
+                  "value": "2025-09-01",
+                  "description": "开始日期"
+                },
+                {
+                  "key": "end_date",
+                  "value": "2025-09-14",
+                  "description": "结束日期"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "按会员统计使用情况",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/usage-records/stats/members",
+              "host": ["{{base_url}}"],
+              "path": ["usage-records", "stats", "members"],
+              "query": [
+                {
+                  "key": "start_date",
+                  "value": "2025-09-01",
+                  "description": "开始日期"
+                },
+                {
+                  "key": "end_date",
+                  "value": "2025-09-14",
+                  "description": "结束日期"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "批量删除上机记录",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\\n  \\\"record_ids\\\": [1, 2, 3]\\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/usage-records/batch",
+              "host": ["{{base_url}}"],
+              "path": ["usage-records", "batch"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "机位管理",
+      "item": [
+        {
+          "name": "获取机位列表",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/machines",
+              "host": ["{{base_url}}"],
+              "path": ["machines"]
+            }
+          }
+        },
+        {
+          "name": "修改机位状态",
+          "request": {
+            "method": "PUT",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"使用中\",\n  \"member_id\": 1,\n  \"hourly_rate\": 10.00\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/machines/1",
+              "host": ["{{base_url}}"],
+              "path": ["machines", "1"]
+            }
+          }
+        },
+        {
+          "name": "修改机位单价",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"hourly_rate\": 12.00\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/machines/1/hourly-rate",
+              "host": ["{{base_url}}"],
+              "path": ["machines", "1", "hourly-rate"]
+            }
+          }
+        },
+        {
+          "name": "批量修改机位单价",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"machine_ids\": [1, 2, 3],\n  \"hourly_rate\": 12.00\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/machines/batch/hourly-rate",
+              "host": ["{{base_url}}"],
+              "path": ["machines", "batch", "hourly-rate"]
+            }
+          }
+        },
+        {
+          "name": "按机位类型批量修改单价",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type_prefix\": \"A\",\n  \"hourly_rate\": 15.00\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/machines/type/hourly-rate",
+              "host": ["{{base_url}}"],
+              "path": ["machines", "type", "hourly-rate"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
