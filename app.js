@@ -38,6 +38,10 @@ app.use('/api/usage-records', usageRecordsRoutes);
 const incomeRoutes = require('./routes/income')(db);
 app.use('/api/income', incomeRoutes);
 
+// 导入机位管理路由
+const machinesRoutes = require('./routes/machines')(db);
+app.use('/api/machines', machinesRoutes);
+
 // 会员路由 - 需要认证
 app.get('/api/members', authMiddleware, (req, res) => {
   db.query('SELECT * FROM members', (err, results) => {
@@ -150,45 +154,56 @@ app.post('/api/members/:id/recharge', authMiddleware, (req, res) => {
   const rechargeAmount = parseFloat(amount);
   
   // 开启事务
-  db.beginTransaction(err => {
+  db.getConnection((err, connection) => {
     if (err) {
       return res.status(500).json({ error: err.message });
     }
-    
-    // 1. 查询会员当前余额
-    db.query('SELECT balance FROM members WHERE id = ?', [id], (err, results) => {
+
+    connection.beginTransaction(err => {
       if (err) {
-        return db.rollback(() => {
-          res.status(500).json({ error: err.message });
-        });
+        connection.release();
+        return res.status(500).json({ error: err.message });
       }
-      
-      if (results.length === 0) {
-        return db.rollback(() => {
-          res.status(404).json({ error: '会员不存在' });
-        });
-      }
-      
-      const currentBalance = parseFloat(results[0].balance) || 0;
-      const newBalance = currentBalance + rechargeAmount;
-      
-      // 2. 更新会员余额
-      db.query('UPDATE members SET balance = ? WHERE id = ?', [newBalance, id], (err) => {
+
+      // 1. 查询会员当前余额
+      connection.query('SELECT balance FROM members WHERE id = ?', [id], (err, results) => {
         if (err) {
-          return db.rollback(() => {
+          return connection.rollback(() => {
+            connection.release();
             res.status(500).json({ error: err.message });
           });
         }
-        
-        // 提交事务
-        db.commit(err => {
+
+        if (results.length === 0) {
+          return connection.rollback(() => {
+            connection.release();
+            res.status(404).json({ error: '会员不存在' });
+          });
+        }
+
+        const currentBalance = parseFloat(results[0].balance) || 0;
+        const newBalance = currentBalance + rechargeAmount;
+
+        // 2. 更新会员余额
+        connection.query('UPDATE members SET balance = ? WHERE id = ?', [newBalance, id], (err) => {
           if (err) {
-            return db.rollback(() => {
+            return connection.rollback(() => {
+              connection.release();
               res.status(500).json({ error: err.message });
             });
           }
-          
-          // 返回充值成功信息和新余额
+
+          // 提交事务
+          connection.commit(err => {
+            if (err) {
+              return connection.rollback(() => {
+                connection.release();
+                res.status(500).json({ error: err.message });
+              });
+            }
+
+            connection.release();
+            // 返回充值成功信息和新余额
           res.json({
             message: '充值成功',
             memberId: id,
@@ -201,85 +216,101 @@ app.post('/api/members/:id/recharge', authMiddleware, (req, res) => {
     });
   });
 });
+});
 
 app.delete('/api/members/:id', authMiddleware, adminMiddleware, (req, res) => {
   const { id } = req.params;
-  
   // 开启事务处理
-  db.beginTransaction(err => {
+  db.getConnection((err, connection) => {
     if (err) {
       return res.status(500).json({ error: err.message });
     }
-    
-    // 1. 检查会员是否存在
-    db.query('SELECT id FROM members WHERE id = ?', [id], (err, results) => {
+
+    connection.beginTransaction(err => {
       if (err) {
-        return db.rollback(() => {
-          res.status(500).json({ error: err.message });
-        });
+        connection.release();
+        return res.status(500).json({ error: err.message });
       }
-      
-      if (results.length === 0) {
-        return db.rollback(() => {
-          res.status(404).json({ error: '会员不存在' });
-        });
-      }
-      
-      // 2. 检查该会员是否正在使用机位
-      db.query('SELECT id FROM machines WHERE member_id = ? AND status = "使用中"', [id], (err, results) => {
+
+      // 1. 检查会员是否存在
+      connection.query('SELECT id FROM members WHERE id = ?', [id], (err, results) => {
         if (err) {
-          return db.rollback(() => {
+          return connection.rollback(() => {
+            connection.release();
             res.status(500).json({ error: err.message });
           });
         }
-        
-        // 如果会员正在使用机位，则不允许删除
-        if (results.length > 0) {
-          return db.rollback(() => {
-            res.status(400).json({ error: '该会员正在使用机位，无法删除' });
+
+        if (results.length === 0) {
+          return connection.rollback(() => {
+            connection.release();
+            res.status(404).json({ error: '会员不存在' });
           });
         }
-        
-        // 3. 解除所有机位关联
-        db.query('UPDATE machines SET member_id = NULL, status = "空闲" WHERE member_id = ?', [id], (err) => {
+
+        // 2. 检查该会员是否正在使用机位
+        connection.query('SELECT id FROM machines WHERE member_id = ? AND status = "使用中"', [id], (err, results) => {
           if (err) {
-            return db.rollback(() => {
+            return connection.rollback(() => {
+              connection.release();
               res.status(500).json({ error: err.message });
             });
           }
-          
-          // 4. 删除使用记录
-          db.query('DELETE FROM usage_records WHERE member_id = ?', [id], (err) => {
+
+          // 如果会员正在使用机位，则不允许删除
+          if (results.length > 0) {
+            return connection.rollback(() => {
+              connection.release();
+              res.status(400).json({ error: '该会员正在使用机位，无法删除' });
+            });
+          }
+
+          // 3. 解除所有机位关联
+          connection.query('UPDATE machines SET member_id = NULL, status = "空闲" WHERE member_id = ?', [id], (err) => {
             if (err) {
-              return db.rollback(() => {
+              return connection.rollback(() => {
+                connection.release();
                 res.status(500).json({ error: err.message });
               });
             }
-            
-            // 5. 删除会员
-            db.query('DELETE FROM members WHERE id = ?', [id], (err) => {
+
+            // 4. 删除使用记录
+            connection.query('DELETE FROM usage_records WHERE member_id = ?', [id], (err) => {
               if (err) {
-                return db.rollback(() => {
+                return connection.rollback(() => {
+                  connection.release();
                   res.status(500).json({ error: err.message });
                 });
               }
-              
-              // 提交事务
-              db.commit(err => {
+
+              // 5. 删除会员
+              connection.query('DELETE FROM members WHERE id = ?', [id], (err) => {
                 if (err) {
-                  return db.rollback(() => {
+                  return connection.rollback(() => {
+                    connection.release();
                     res.status(500).json({ error: err.message });
                   });
                 }
-                
-                res.json({ message: '会员删除成功' });
-              });
+
+                // 提交事务
+                connection.commit(err => {
+                  if (err) {
+                    return connection.rollback(() => {
+                      connection.release();
+                      res.status(500).json({ error: err.message });
+                    });
+                  }
+
+                  connection.release();
+                  res.json({ message: '会员删除成功' });
+                });
             });
           });
         });
       });
     });
   });
+})
 });
 
 // 机位路由 - 需要认证
@@ -305,59 +336,69 @@ app.put('/api/machines/:id', authMiddleware, (req, res) => {
   }
   
   // 开启事务
-  db.beginTransaction(err => {
+  db.getConnection((err, connection) => {
     if (err) {
       return res.status(500).json({ error: err.message });
     }
-    
-    // 首先检查机位当前状态
-    db.query('SELECT * FROM machines WHERE id = ?', [id], (err, results) => {
+
+    connection.beginTransaction(err => {
       if (err) {
-        return db.rollback(() => {
-          res.status(500).json({ error: err.message });
-        });
+        connection.release();
+        return res.status(500).json({ error: err.message });
       }
-      
-      if (results.length === 0) {
-        return db.rollback(() => {
-          res.status(404).json({ error: '机位不存在' });
-        });
-      }
-      
-      const machine = results[0];
-      
-      // 如果机位当前有人使用，且要修改状态，则需要先让用户下机
-      if (machine.status === '使用中' && machine.member_id && status && status !== '使用中') {
-        // 查找未结束的上机记录
-        db.query(
-          'SELECT id FROM usage_records WHERE machine_id = ? AND end_time IS NULL',
-          [id],
-          (err, recordResults) => {
-            if (err) {
-              return db.rollback(() => {
-                res.status(500).json({ error: err.message });
-              });
-            }
-            
-            if (recordResults.length > 0) {
-              return db.rollback(() => {
-                res.status(400).json({ 
-                  error: '该机位有人正在使用，请先让用户下机后再修改状态',
-                  machine_id: id,
-                  current_status: machine.status
+
+      // 首先检查机位当前状态
+      connection.query('SELECT * FROM machines WHERE id = ?', [id], (err, results) => {
+        if (err) {
+          return connection.rollback(() => {
+            connection.release();
+            res.status(500).json({ error: err.message });
+          });
+        }
+
+        if (results.length === 0) {
+          return connection.rollback(() => {
+            connection.release();
+            res.status(404).json({ error: '机位不存在' });
+          });
+        }
+
+        const machine = results[0];
+
+        // 如果机位当前有人使用，且要修改状态，则需要先让用户下机
+        if (machine.status === '使用中' && machine.member_id && status && status !== '使用中') {
+          // 查找未结束的上机记录
+          connection.query(
+            'SELECT id FROM usage_records WHERE machine_id = ? AND end_time IS NULL',
+            [id],
+            (err, recordResults) => {
+              if (err) {
+                return connection.rollback(() => {
+                  connection.release();
+                  res.status(500).json({ error: err.message });
                 });
-              });
+              }
+
+              if (recordResults.length > 0) {
+                return connection.rollback(() => {
+                  connection.release();
+                  res.status(400).json({
+                    error: '该机位有人正在使用，请先让用户下机后再修改状态',
+                    machine_id: id,
+                    current_status: machine.status
+                  });
+                });
+              }
+
+              // 如果没有未结束的上机记录，但状态是"使用中"，这是一种异常情况
+              // 可以继续更新机位状态
+              proceedWithUpdate();
             }
-            
-            // 如果没有未结束的上机记录，但状态是"使用中"，这是一种异常情况
-            // 可以继续更新机位状态
-            proceedWithUpdate();
-          }
-        );
-      } else {
-        // 如果机位空闲或者不需要修改状态，直接更新
-        proceedWithUpdate();
-      }
+          );
+        } else {
+          // 如果机位空闲或者不需要修改状态，直接更新
+          proceedWithUpdate();
+        }
       
       function proceedWithUpdate() {
         // 构建更新查询
@@ -391,28 +432,32 @@ app.put('/api/machines/:id', authMiddleware, (req, res) => {
         // 添加WHERE条件
         query += ' WHERE id=?';
         params.push(id);
-        
-        db.query(query, params, (err) => {
+
+        connection.query(query, params, (err) => {
           if (err) {
-            return db.rollback(() => {
+            return connection.rollback(() => {
+              connection.release();
               res.status(500).json({ error: err.message });
             });
           }
-          
+
           // 提交事务
-          db.commit(err => {
+          connection.commit(err => {
             if (err) {
-              return db.rollback(() => {
+              return connection.rollback(() => {
+                connection.release();
                 res.status(500).json({ error: err.message });
               });
             }
-            
+
+            connection.release();
             res.json({ message: '机位更新成功' });
           });
         });
       }
     });
   });
+});
 });
 
 // 专门用于修改单个机位单价的接口
@@ -478,44 +523,56 @@ app.patch('/api/machines/batch/hourly-rate', authMiddleware, adminMiddleware, (r
   const placeholders = machine_ids.map(() => '?').join(',');
   
   // 开始事务
-  db.beginTransaction(err => {
+  db.getConnection((err, connection) => {
     if (err) {
       return res.status(500).json({ error: err.message });
     }
-    
-    // 更新机位单价
-    db.query(`UPDATE machines SET hourly_rate = ? WHERE id IN (${placeholders})`, [rate, ...machine_ids], (err, result) => {
+
+    connection.beginTransaction(err => {
       if (err) {
-        return db.rollback(() => {
-          res.status(500).json({ error: err.message });
-        });
+        connection.release();
+        return res.status(500).json({ error: err.message });
       }
-      
-      if (result.affectedRows === 0) {
-        return db.rollback(() => {
-          res.status(404).json({ error: '未找到指定机位' });
-        });
-      }
-      
-      // 查询更新后的机位信息
-      db.query(`SELECT id, machine_number, hourly_rate FROM machines WHERE id IN (${placeholders})`, machine_ids, (err, results) => {
+
+      // 更新机位单价
+      connection.query(`UPDATE machines SET hourly_rate = ? WHERE id IN (${placeholders})`, [rate, ...machine_ids], (err, result) => {
         if (err) {
-          return db.rollback(() => {
+          return connection.rollback(() => {
+            connection.release();
             res.status(500).json({ error: err.message });
           });
         }
-        
-        // 提交事务
-        db.commit(err => {
+
+        if (result.affectedRows === 0) {
+          return connection.rollback(() => {
+            connection.release();
+            res.status(404).json({ error: '未找到指定机位' });
+          });
+        }
+
+        // 查询更新后的机位信息
+        connection.query(`SELECT id, machine_number, hourly_rate FROM machines WHERE id IN (${placeholders})`, machine_ids, (err, results) => {
           if (err) {
-            return db.rollback(() => {
+            return connection.rollback(() => {
+              connection.release();
               res.status(500).json({ error: err.message });
             });
           }
-          
-          res.json({
-            message: `成功更新${result.affectedRows}个机位的单价`,
-            machines: results
+
+          // 提交事务
+          connection.commit(err => {
+            if (err) {
+              return connection.rollback(() => {
+                connection.release();
+                res.status(500).json({ error: err.message });
+              });
+            }
+
+            connection.release();
+            res.json({
+              message: `成功更新${result.affectedRows}个机位的单价`,
+              machines: results
+            });
           });
         });
       });
@@ -543,44 +600,57 @@ app.patch('/api/machines/type/hourly-rate', authMiddleware, adminMiddleware, (re
   }
   
   // 开始事务
-  db.beginTransaction(err => {
+  db.getConnection((err, connection) => {
     if (err) {
       return res.status(500).json({ error: err.message });
     }
-    
-    // 更新机位单价
-    db.query('UPDATE machines SET hourly_rate = ? WHERE machine_number LIKE ?', [rate, `${type_prefix}%`], (err, result) => {
+
+    connection.beginTransaction(err => {
       if (err) {
-        return db.rollback(() => {
-          res.status(500).json({ error: err.message });
-        });
+        connection.release();
+        return res.status(500).json({ error: err.message });
       }
-      
-      if (result.affectedRows === 0) {
-        return db.rollback(() => {
-          res.status(404).json({ error: `未找到前缀为 ${type_prefix} 的机位` });
-        });
-      }
-      
-      // 查询更新后的机位信息
-      db.query('SELECT id, machine_number, hourly_rate FROM machines WHERE machine_number LIKE ?', [`${type_prefix}%`], (err, results) => {
+
+      // 更新机位单价
+      connection.query('UPDATE machines SET hourly_rate = ? WHERE machine_number LIKE ?', [rate, `${type_prefix}%`], (err, result) => {
         if (err) {
-          return db.rollback(() => {
+          return connection.rollback(() => {
+            connection.release();
             res.status(500).json({ error: err.message });
           });
         }
-        
-        // 提交事务
-        db.commit(err => {
+
+        if (result.affectedRows === 0) {
+          return connection.rollback(() => {
+            connection.release();
+            res.status(404).json({ error: `未找到前缀为 ${type_prefix} 的机位` });
+          });
+        }
+
+        // 查询更新后的机位信息
+        connection.query('SELECT id, machine_number, hourly_rate FROM machines WHERE machine_number LIKE ?', [`${type_prefix}%`], (err, results) => {
           if (err) {
-            return db.rollback(() => {
+            return connection.rollback(() => {
+              connection.release();
               res.status(500).json({ error: err.message });
             });
           }
-          
-          res.json({
-            message: `成功更新${result.affectedRows}个机位的单价`,
-            machines: results
+
+          // 提交事务
+          connection.commit(err => {
+            if (err) {
+              return connection.rollback(() => {
+                connection.release();
+                res.status(500).json({ error: err.message });
+              });
+            }
+
+            connection.release();
+
+            res.json({
+              message: `成功更新${result.affectedRows}个机位的单价`,
+              machines: results
+            });
           });
         });
       });
